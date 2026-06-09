@@ -1,9 +1,10 @@
 TrialLogix
 
 
-Copyright (c) 2026 Sagar Kumar
-All Rights Reserved.
+PROPRIETARY SOFTWARE
 
-This repository and its contents are provided for the sole purpose of code review and judging for Google for Startups AI Agents Challenge. 
+This repository is provided exclusively for judging and evaluation purposes.
 
-No license is granted to use, modify, copy, distribute, or create derivative works of this code, in whole or in part, without express written permission from the copyright holder.
+No permission is granted to use, copy, modify, distribute, sublicense, commercialize, or create derivative works from any part of this repository.
+
+All Rights Reserved © 2026 Sagar Kumar.
