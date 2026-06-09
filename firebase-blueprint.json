@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "Patient": {
+      "title": "Patient Profile",
+      "description": "Patient clinical demographics, diagnoses, biomarkers, labs, and geographic indicators.",
+      "type": "object",
+      "properties": {
+        "patient_id": { "type": "string", "description": "The unique ID of the clinical subject." },
+        "name": { "type": "string", "description": "Subject full legal name." },
+        "age": { "type": "number" },
+        "sex": { "type": "string" },
+        "diagnoses": { "type": "array" },
+        "biomarkers": { "type": "array" },
+        "prior_treatments": { "type": "array" },
+        "ecog_performance_status": { "type": "number" },
+        "lab_values": { "type": "object" },
+        "location": { "type": "object" },
+        "comorbidities": { "type": "array" },
+        "last_therapy_days_ago": { "type": "number" },
+        "willing_to_biopsy": { "type": "boolean" },
+        "willing_to_change_location": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["patient_id", "name"]
+    },
+    "Referral": {
+      "title": "Referral Approval",
+      "description": "Formulated clinical matching memos, dispatch statuses, and approval details.",
+      "type": "object",
+      "properties": {
+        "approval_id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "patient_id": { "type": "string" },
+        "patient_name": { "type": "string" },
+        "nct_id": { "type": "string" },
+        "trial_title": { "type": "string" },
+        "status": { "type": "string" },
+        "email_subject": { "type": "string" },
+        "email_body": { "type": "string" },
+        "coordinator_email": { "type": "string" },
+        "coordinator_name": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["approval_id", "patient_id", "nct_id"]
+    },
+    "GeminiAnalysis": {
+      "title": "Gemini Clinical Analysis",
+      "description": "Records of analysis reports, reasoning outputs, and search groundings generated for a patient.",
+      "type": "object",
+      "properties": {
+        "analysis_id": { "type": "string" },
+        "patient_id": { "type": "string" },
+        "nct_id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "triggering_action": { "type": "string", "description": "E.g. match-reasoning, parse-clinical-note, trial-enrich" },
+        "prompt": { "type": "string" },
+        "output_raw": { "type": "string" },
+        "parsed_metadata": { "type": "object" },
+        "grounding_metadata": { "type": "object" }
+      },
+      "required": ["analysis_id", "patient_id"]
+    },
+    "ChatMessage": {
+      "title": "Interactive Assistant Q&A Log",
+      "description": "Dialog log recording questions asked of the assistant for a particular patient.",
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string" },
+        "patient_id": { "type": "string" },
+        "nct_id": { "type": "string" },
+        "sender_email": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string" }
+      },
+      "required": ["message_id", "patient_id", "role", "text"]
+    },
+    "SystemAuditLog": {
+      "title": "System Audit Log Entry",
+      "description": "Secure record of clinical events and platform access tracing for compliance.",
+      "type": "object",
+      "properties": {
+        "log_id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "severity": { "type": "string" },
+        "subsystem": { "type": "string" },
+        "message": { "type": "string" },
+        "patient_id": { "type": "string" },
+        "operator": { "type": "string" }
+      },
+      "required": ["log_id", "timestamp", "severity", "subsystem", "message"]
+    }
+  },
+  "firestore": {
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Store patient clinical profile records."
+    },
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Store trial referral documents."
+    },
+    "/gemini_analyses/{analysisId}": {
+      "schema": "GeminiAnalysis",
+      "description": "Secure logging of Gemini-driven eligibility and processing states."
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Logging of interactive clinical Q&A discussions."
+    },
+    "/system_audit_logs/{logId}": {
+      "schema": "SystemAuditLog",
+      "description": "Durable multi-level system orchestrator compliance log."
+    }
+  }
+}
