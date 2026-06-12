@@ -74,6 +74,21 @@ const TrialLogixLogo = ({ size = 32, showText = true, textClassName = "font-blac
   );
 };
 
+
+const apiFetch = async (url: string, options: RequestInit = {}) => {
+  let token = "";
+  if (auth.currentUser) {
+    try {
+      token = await auth.currentUser.getIdToken();
+    } catch (e) {
+      console.warn("Failed retrieving Firebase ID Token", e);
+    }
+  }
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(url, { ...options, headers });
+};
+
 export default function App() {
   // ==========================================
   // AUTHENTICATION AND LOGGED IN USER STATE
@@ -124,7 +139,7 @@ export default function App() {
   const handleCredentialsLogin = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!loginEmail.trim() || !loginPassword) {
-      setLoginError("Please supply both clinician email and security key keys.");
+      setLoginError("Please supply both clinician email and security key.");
       return;
     }
     setLoginError(null);
@@ -157,6 +172,31 @@ export default function App() {
     setCurrentClinician(null);
   };
 
+  // LOGOUT ON INACTIVITY
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimeout = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (isLoggedIn) {
+        timeoutId = setTimeout(() => {
+          handleLogout();
+          console.log("Logged out due to inactivity");
+        }, 600000); // 10 minutes
+      }
+    };
+
+    resetTimeout();
+
+    const activityEvents = ['mousemove', 'keydown', 'scroll', 'click'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetTimeout));
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetTimeout));
+    };
+  }, [isLoggedIn]);
+
   const handleRegisterUser = async (e: FormEvent) => {
     e.preventDefault();
     setAdminStatusMsg({ text: "Registering standard users is handled automatically via Google Sign In.", type: "info" });
@@ -166,7 +206,7 @@ export default function App() {
     if (!currentClinician) return;
     setGeminiStatusLoading(true);
     try {
-      const res = await fetch("/api/admin/gemini-key/status", {
+      const res = await apiFetch("/api/admin/gemini-key/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requesterEmail: currentClinician.email })
@@ -189,7 +229,7 @@ export default function App() {
     if (!currentClinician) return;
     setGeminiStatusMsg(null);
     try {
-      const res = await fetch("/api/admin/gemini-key/update", {
+      const res = await apiFetch("/api/admin/gemini-key/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -225,7 +265,7 @@ export default function App() {
 
   const fetchOrchestratorLogs = async () => {
     try {
-      const res = await fetch("/api/orchestrator/logs");
+      const res = await apiFetch("/api/orchestrator/logs");
       if (res.ok) {
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
@@ -451,21 +491,21 @@ export default function App() {
         return response.json();
       };
 
-      const responsePatients = await fetch("/api/patients");
+      const responsePatients = await apiFetch("/api/patients");
       if (!responsePatients.ok) {
         throw new Error(`HTTP ${responsePatients.status}. The active EHR patients server may be restarting.`);
       }
       const dataPatients = await safeParseJson(responsePatients) as PatientProfile[];
       setPatients(dataPatients);
 
-      const responseTrials = await fetch("/api/trials");
+      const responseTrials = await apiFetch("/api/trials");
       if (!responseTrials.ok) {
         throw new Error(`HTTP ${responseTrials.status}`);
       }
       const dataTrials = await safeParseJson(responseTrials) as ClinicalTrial[];
       setTrials(dataTrials);
 
-      const responseApprovals = await fetch("/api/approvals");
+      const responseApprovals = await apiFetch("/api/approvals");
       if (!responseApprovals.ok) {
         throw new Error(`HTTP ${responseApprovals.status}`);
       }
@@ -473,7 +513,7 @@ export default function App() {
       setApprovals(dataApprovals);
 
       try {
-        const responseClinics = await fetch("/api/auth/users");
+        const responseClinics = await apiFetch("/api/auth/users");
         if (responseClinics.ok) {
           const clinicsContentType = responseClinics.headers.get("content-type") || "";
           if (clinicsContentType.includes("application/json")) {
@@ -770,7 +810,7 @@ export default function App() {
     };
 
     try {
-      const res = await fetch("/api/patients", {
+      const res = await apiFetch("/api/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -814,7 +854,7 @@ export default function App() {
 
     try {
       showToast(`Contacting ClinicalTrials.gov for condition: "${searchQuery}" (pageSize: ${searchPageSize})...`, "info");
-      const res = await fetch(`/api/search-trials?condition=${encodeURIComponent(searchQuery)}&pageSize=${searchPageSize}&patient_id=${currentPatient?.patient_id || ""}`);
+      const res = await apiFetch(`/api/search-trials?condition=${encodeURIComponent(searchQuery)}&pageSize=${searchPageSize}&patient_id=${currentPatient?.patient_id || ""}`);
       const data = await res.json();
       
       if (!res.ok) {
@@ -846,7 +886,7 @@ export default function App() {
     setNextPageToken(null);
     try {
       showToast(`Invoking crawler helper for query: "${query}" (pageSize: ${searchPageSize})...`, "info");
-      const res = await fetch(`/api/search-trials?condition=${encodeURIComponent(query)}&pageSize=${searchPageSize}&patient_id=${currentPatient?.patient_id || ""}`);
+      const res = await apiFetch(`/api/search-trials?condition=${encodeURIComponent(query)}&pageSize=${searchPageSize}&patient_id=${currentPatient?.patient_id || ""}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed live study query");
       setSearchFeedback(data.message);
@@ -872,7 +912,7 @@ export default function App() {
 
     try {
       showToast(`Loading additional ClinicalTrials.gov results...`, "info");
-      const res = await fetch(`/api/search-trials?condition=${encodeURIComponent(searchQuery)}&pageSize=${searchPageSize}&pageToken=${nextPageToken}&patient_id=${currentPatient?.patient_id || ""}`);
+      const res = await apiFetch(`/api/search-trials?condition=${encodeURIComponent(searchQuery)}&pageSize=${searchPageSize}&pageToken=${nextPageToken}&patient_id=${currentPatient?.patient_id || ""}`);
       const data = await res.json();
       
       if (!res.ok) {
@@ -906,7 +946,7 @@ export default function App() {
 
     try {
       showToast("Formulating formal clinical referral memo...", "info");
-      const res = await fetch("/api/approvals", {
+      const res = await apiFetch("/api/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -946,7 +986,7 @@ export default function App() {
 
     try {
       // Record dispatch update
-      const res = await fetch("/api/approvals/send", {
+      const res = await apiFetch("/api/approvals/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1008,7 +1048,7 @@ export default function App() {
     setIsIngestingNote(true);
     showToast("Gemini Profile Parser is transcribing clinical report document...", "info");
     try {
-      const res = await fetch("/api/patients/extract-text-from-file", {
+      const res = await apiFetch("/api/patients/extract-text-from-file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileBase64: base64, fileMimeType: mime })
@@ -1039,7 +1079,7 @@ export default function App() {
 
     try {
       showToast("Invoking Profile Parser Agent (gemini-3.5-flash)...", "info");
-      const res = await fetch("/api/patients/parse-clinical-note", {
+      const res = await apiFetch("/api/patients/parse-clinical-note", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -1060,14 +1100,46 @@ export default function App() {
       setParsedAnonymized(data.anonymizedProfile);
       setDuplicatePatient(data.duplicatePatient || null);
       setIngestedRawText(data.extractedText || "");
-      setShowDlpModal(true);
-      showToast("DLP scan completed! Please review parsed data against duplications.", "success");
       
-      // Clear file states
-      setNoteFileBase64("");
-      setNoteFileMimeType("");
-      setNoteFileName("");
-      setMergePatientId("");
+      if (!data.duplicatePatient) {
+        // Patient not found in registry -> directly loads in the registry
+        showToast("Saving evaluated profile to registry...", "info");
+        const saveRes = await apiFetch('/api/patients/save-parsed-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            parsedProfile: data.originalProfile,
+            rawText: data.extractedText || "",
+            isUpdating: false
+          })
+        });
+
+        if (!saveRes.ok) {
+          const d = await saveRes.json();
+          throw new Error(d.error || 'Failed to save profile');
+        }
+        
+        showToast('Patient successfully added directly into registry.', 'success');
+        
+        // Clear file states
+        setNoteFileBase64("");
+        setNoteFileMimeType("");
+        setNoteFileName("");
+        setMergePatientId("");
+        
+        await loadRecords();
+        setSelectedPatientId(data.originalProfile.patient_id);
+      } else {
+        // Patient found in registry -> show modal for confirm and merge
+        setShowDlpModal(true);
+        showToast("DLP scan completed! Duplicate matched, please review.", "info");
+        
+        // Clear file states
+        setNoteFileBase64("");
+        setNoteFileMimeType("");
+        setNoteFileName("");
+        setMergePatientId("");
+      }
     } catch (err: any) {
       showToast(`Ingestion error: ${err.message}`, "error");
     } finally {
@@ -1079,7 +1151,7 @@ export default function App() {
     if (!parsedOriginal) return;
     try {
       showToast('Saving evaluated profile to registry...', 'info');
-      const res = await fetch('/api/patients/save-parsed-profile', {
+      const res = await apiFetch('/api/patients/save-parsed-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1129,7 +1201,7 @@ export default function App() {
 
       try {
         showToast("Instructing Gemini to analyze document & map parameters...", "info");
-        const res = await fetch("/api/patients/parse-clinical-note", {
+        const res = await apiFetch("/api/patients/parse-clinical-note", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1225,7 +1297,7 @@ export default function App() {
 
     try {
       showToast("Activating EHR Context Agent MCP Server ( Epic / Cerner Sync )...", "info");
-      const res = await fetch(`/api/patients/${patientId}/ehr-sync`, {
+      const res = await apiFetch(`/api/patients/${patientId}/ehr-sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
@@ -1280,7 +1352,7 @@ export default function App() {
 
     try {
       showToast("Invoking Eligibility Matcher (Vertex AI gemini-3.5-flash)...", "info");
-      const res = await fetch("/api/match-reasoning", {
+      const res = await apiFetch("/api/match-reasoning", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ patient_id: selectedPatientId, nct_id: selectedTrialId })
@@ -1314,7 +1386,7 @@ export default function App() {
 
     try {
       showToast("Vertex AI Grounding (Google Search) initialized...", "info");
-      const res = await fetch(`/api/trials/${nctId}/enrich`, {
+      const res = await apiFetch(`/api/trials/${nctId}/enrich`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
@@ -1346,7 +1418,7 @@ export default function App() {
 
     try {
       showToast("Sending secure webhook POST back to Backend Cloud Run container...", "info");
-      const res = await fetch("/api/webhook/streamlit-approve", {
+      const res = await apiFetch("/api/webhook/streamlit-approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1387,7 +1459,7 @@ export default function App() {
 
     try {
       showToast("Deleting pending clinical referral draft...", "info");
-      const res = await fetch(`/api/approvals/${approvalId}`, {
+      const res = await apiFetch(`/api/approvals/${approvalId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" }
       });
@@ -1490,7 +1562,7 @@ Now answer the user instruction: "${userText}"`;
         { role: "user", text: contextPreamble }
       ];
 
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2188,7 +2260,7 @@ Now answer the user instruction: "${userText}"`;
                                 // Send empty key to trigger fallback to process.env.GEMINI_API_KEY
                                 setGeminiStatusMsg(null);
                                 try {
-                                  const res = await fetch("/api/admin/gemini-key/update", {
+                                  const res = await apiFetch("/api/admin/gemini-key/update", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -3362,7 +3434,7 @@ Now answer the user instruction: "${userText}"`;
                         setSearchFeedback(null);
                         setNextPageToken(null);
                         try {
-                          await fetch("/api/trials", { method: "DELETE" });
+                          await apiFetch("/api/trials", { method: "DELETE" });
                           await loadRecords();
                         } catch (err) {
                           console.error("error resetting trials", err);
@@ -3451,7 +3523,7 @@ Now answer the user instruction: "${userText}"`;
                               onClick={async () => {
                                 try {
                                   showToast(`Assigning co-investigator to ${currentPatient.name}...`, "info");
-                                  const res = await fetch(`/api/patients/${currentPatient.patient_id}/doctors`, {
+                                  const res = await apiFetch(`/api/patients/${currentPatient.patient_id}/doctors`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ doctorName: selectedNewDoctor })
@@ -3974,7 +4046,7 @@ Now answer the user instruction: "${userText}"`;
                                 willing_to_change_location: tunedLocationChange,
                                 biomarkers: tunedBiomarkers
                               };
-                              const response = await fetch(`/api/patients/${currentPatient.patient_id}/update-profile`, {
+                              const response = await apiFetch(`/api/patients/${currentPatient.patient_id}/update-profile`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify(payload)
@@ -5769,7 +5841,7 @@ Now answer the user instruction: "${userText}"`;
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowDlpModal(false)}
+                  onClick={handleSaveParsedProfile}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold p-2.5 px-6 rounded-lg text-xs cursor-pointer shadow-3xs"
                 >
                   Onload Patient Into Registry List
